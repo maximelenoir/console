@@ -18,6 +18,7 @@ use tokio::net::UnixListener;
 use tokio::sync::{mpsc, oneshot};
 #[cfg(unix)]
 use tokio_stream::wrappers::UnixListenerStream;
+use tonic::transport::server::Router;
 use tracing_core::{
     span::{self, Id},
     subscriber::{self, Subscriber},
@@ -988,6 +989,19 @@ impl Server {
         aggregate.abort();
         res?.map_err(Into::into)
     }
+        
+    /// Starts the aggregator and set-up the [`tonic`] gRPC transport server `builder`.
+    ///
+    /// [`tonic`]: https://docs.rs/tonic/
+    pub fn bind(mut self, mut builder: tonic::transport::Server) -> Router {
+        let aggregate = self
+            .aggregator
+            .take()
+            .expect("cannot start server multiple times");
+        let _ = spawn_named(aggregate.run(), "console::aggregate");
+        let srv = proto::instrument::instrument_server::InstrumentServer::new(self);
+        builder.add_service(srv)
+    }    
 }
 
 #[tonic::async_trait]
